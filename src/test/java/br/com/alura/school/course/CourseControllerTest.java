@@ -1,6 +1,7 @@
 package br.com.alura.school.course;
 
 import br.com.alura.school.enrollment.Enrollment;
+import br.com.alura.school.enrollment.EnrollmentRepository;
 import br.com.alura.school.enrollment.NewEnrollmentRequest;
 import br.com.alura.school.user.User;
 import br.com.alura.school.user.UserRepository;
@@ -33,6 +34,9 @@ class CourseControllerTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EnrollmentRepository enrollmentRepository;
 
     @Test
     void should_retrieve_course_by_code() throws Exception {
@@ -79,9 +83,24 @@ class CourseControllerTest {
     @Test
     void not_found_when_user_does_not_exist_for_enrollment() throws Exception {
         NewEnrollmentRequest newEnrollmentRequest = new NewEnrollmentRequest("non-existent");
-        courseRepository.save(new Course("spring-4", "Spring Data", "Spring Data: JPA and Hibernate"));
+        Course course = new Course("spring-3", "Spring Data", "Spring Data: JPA and Hibernate");
 
-        mockMvc.perform(post("/courses/spring-4/enroll")
+        courseRepository.save(course);
+
+        mockMvc.perform(post("/courses/spring-3/enroll")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonMapper.writeValueAsString(newEnrollmentRequest)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void not_found_when_course_does_not_exist_for_enrollment() throws Exception {
+        NewEnrollmentRequest newEnrollmentRequest = new NewEnrollmentRequest("Paul");
+        User user = new User("Paul", "paul@email.com");
+
+        userRepository.save(user);
+
+        mockMvc.perform(post("/courses/invalid/enroll")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonMapper.writeValueAsString(newEnrollmentRequest)))
                 .andExpect(status().isNotFound());
@@ -89,13 +108,78 @@ class CourseControllerTest {
 
     @Test
     void should_add_new_enrollement() throws Exception {
+        NewEnrollmentRequest newEnrollmentRequest = new NewEnrollmentRequest("lucas");
+
         userRepository.save(new User("lucas", "lucas@email.com"));
         courseRepository.save(new Course("sql-1", "MySql Basics", "MySql Basics"));
 
         mockMvc.perform(post("/courses/sql-1/enroll")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonMapper.writeValueAsString(new NewEnrollmentRequest("lucas"))))
+                .content(jsonMapper.writeValueAsString(newEnrollmentRequest)))
                 .andExpect(status().isCreated());
     }
 
+    @Test
+    void bad_request_when_user_already_enrolled_in_course_mentioned() throws Exception {
+        NewEnrollmentRequest newEnrollmentRequest = new NewEnrollmentRequest("carlos");
+
+        userRepository.save(new User("carlos", "carlos@email.com"));
+        courseRepository.save(new Course("java-3", "Streams in java", "Streams in java"));
+
+        mockMvc.perform(post("/courses/java-3/enroll")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(jsonMapper.writeValueAsString(newEnrollmentRequest)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/courses/java-3/enroll")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(jsonMapper.writeValueAsString(newEnrollmentRequest)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_retrieve_in_first_position_the_user_with_more_enrolled_courses() throws Exception {
+        User jack = new User("jack", "jack@email.com");
+        User julia = new User("julia", "julia@email.com");
+
+        Course sql2 = new Course("sql-2", "SELECT", "SELECT statement");
+        Course sql3 = new Course("sql-3", "INSERT", "INSERT INTO statement");
+        Course sql4 = new Course("sql-4", "DELETE", "DELETE statement");
+
+        userRepository.save(julia);
+        userRepository.save(jack);
+
+        courseRepository.save(sql2);
+        courseRepository.save(sql3);
+        courseRepository.save(sql4);
+
+        enrollmentRepository.save(new Enrollment(julia, sql2));
+        enrollmentRepository.save(new Enrollment(julia, sql3));
+        enrollmentRepository.save(new Enrollment(julia, sql4));
+
+        enrollmentRepository.save(new Enrollment(jack, sql2));
+
+        mockMvc.perform(get("/courses/enroll/report")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.length()", is(2)))
+                .andExpect(jsonPath("$[0].email", is("julia@email.com")))
+                .andExpect(jsonPath("$[0].quantidade_matriculas", is(3)))
+                .andExpect(jsonPath("$[1].email", is("jack@email.com")))
+                .andExpect(jsonPath("$[1].quantidade_matriculas", is(1)));
+    }
+
+    @Test
+    void no_content_when_no_enrollments_found() throws Exception {
+        User alicia = new User("alicia", "alicia@email.com");
+        Course sql2 = new Course("Python-1", "Python Basics", "Python Basics");
+
+        userRepository.save(alicia);
+        courseRepository.save(sql2);
+
+        mockMvc.perform(get("/courses/enroll/report")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+    }
 }

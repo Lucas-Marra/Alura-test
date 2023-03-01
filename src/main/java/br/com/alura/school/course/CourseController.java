@@ -71,9 +71,11 @@ class CourseController {
     }
 
     @GetMapping("/courses/enroll/report")
-    ResponseEntity<List<UserEnrollmentsResponse>> teste(){
+    ResponseEntity<List<UserEnrollmentsResponse>> numberOfEnrollsByUsers(){
         List<User> users = userRepository.findDistinctByCoursesIsNotNull().orElseThrow(() -> new ResponseStatusException(NO_CONTENT, "No users found enrolled in any course"));
         if(users.size() == 0) return ResponseEntity.noContent().build();
-        return ResponseEntity.ok(users.stream().map(UserEnrollmentsResponse::new).sorted(Comparator.comparing(UserEnrollmentsResponse::getEnrollmentsCount).reversed()).collect(Collectors.toList()));
+        return ResponseEntity.ok(users.stream().map(UserEnrollmentsResponse::new)
+                .sorted(Comparator.comparing(UserEnrollmentsResponse::getEnrollmentsCount).reversed())
+                .collect(Collectors.toList()));
     }
 }
